@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Test from "./pages/Test";
 import Layout from "./components/Layout";
+import Home from "./pages/Home";
 import BookAppointment from "./pages/BookAppointment";
 import ConfirmAppointment from "./pages/ConfirmAppointment";
 
@@ -14,42 +15,11 @@ const DiagnosticPage = () => (
   </div>
 );
 
-// Home page component
-const Home = () => (
-  <div style={{ padding: '20px', textAlign: 'center' }}>
-    <h1>Kumbala Cooperative Hospital</h1>
-    <p>Welcome to our appointment booking system.</p>
-    <div style={{ margin: '20px 0' }}>
-      <a href="/book-appointment" 
-         style={{ 
-           display: 'inline-block',
-           padding: '10px 20px',
-           background: '#1e40af',
-           color: 'white',
-           borderRadius: '4px',
-           textDecoration: 'none'
-         }}>
-        Book Appointment
-      </a>
-    </div>
-    <div style={{ margin: '10px 0' }}>
-      <a href="/diagnostic" style={{ color: 'blue', textDecoration: 'underline' }}>
-        Diagnostic Page
-      </a>
-    </div>
-    <div style={{ margin: '10px 0' }}>
-      <a href="/test" style={{ color: 'blue', textDecoration: 'underline' }}>
-        Test Page
-      </a>
-    </div>
-  </div>
-);
-
 const App = () => {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Home />} />
+        <Route path="/" element={<Layout><Home /></Layout>} />
         <Route path="/book-appointment" element={<Layout><BookAppointment /></Layout>} />
         <Route path="/confirm-appointment" element={<Layout><ConfirmAppointment /></Layout>} />
         <Route path="/diagnostic" element={<DiagnosticPage />} />

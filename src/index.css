@@ -33,6 +33,18 @@
     --ring: 221.2 83.2% 53.3%;
 
     --radius: 0.5rem;
+    
+    /* Hospital theme colors */
+    --hospital-50: 210 100% 97%;
+    --hospital-100: 210 100% 90%;
+    --hospital-200: 210 100% 80%;
+    --hospital-300: 210 100% 70%;
+    --hospital-400: 210 100% 60%;
+    --hospital-500: 210 100% 50%;
+    --hospital-600: 210 100% 40%;
+    --hospital-700: 210 100% 30%;
+    --hospital-800: 210 100% 20%;
+    --hospital-900: 210 100% 10%;
   }
 
   .dark {
