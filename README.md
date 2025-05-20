@@ -1,73 +1,82 @@
-# Welcome to your Lovable project
+# Kumbala Cooperative Hospital Appointment System
 
-## Project info
+A modern, multi-step appointment booking system for Kumbala Cooperative Hospital built with React, TypeScript and TailwindCSS.
 
-**URL**: https://lovable.dev/projects/180d9084-8b7a-44b0-8ca8-e01c889a76b9
+## Features
 
-## How can I edit this code?
+- Multi-step appointment booking process
+- Doctor selection with specialization filtering
+- Real-time availability of time slots based on doctor's working hours
+- Token number assignment based on existing appointments
+- Google Sheets integration for appointment management
+- Printable appointment token/slip
 
-There are several ways of editing your application.
+## Setup Instructions
 
-**Use Lovable**
+### 1. Installation
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/180d9084-8b7a-44b0-8ca8-e01c889a76b9) and start prompting.
+```bash
+# Clone the repository
+git clone https://github.com/your-username/kumbala-cooperative-hospital.git
 
-Changes made via Lovable will be committed automatically to this repo.
+# Navigate to the project folder
+cd kumbala-cooperative-hospital
 
-**Use your preferred IDE**
+# Install dependencies
+npm install
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start the development server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+### 2. Google Sheets Integration
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+To set up the Google Sheets integration:
 
-**Use GitHub Codespaces**
+1. Create a new Google Sheet
+2. Go to Extensions > Apps Script
+3. Paste the code from `google-apps-script.js` in this repository
+4. Update the `SHEET_ID` variable with your Google Sheet ID (you can find this in the URL of your sheet)
+5. Save the script
+6. Deploy it as a web app:
+   - Click on "Deploy" > "New deployment"
+   - Select "Web app" as the type
+   - Set "Execute as" to "Me"
+   - Set "Who has access" to "Anyone, even anonymous"
+   - Click "Deploy"
+7. Copy the deployment URL
+8. In your project, open `src/context/AppointmentContext.tsx` and update the `GOOGLE_SHEETS_API_URL` constant with your deployment URL
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+### 3. Configuration
 
-## What technologies are used for this project?
+You can customize the application by:
 
-This project is built with:
+- Updating the doctor information in `src/context/AppointmentContext.tsx`
+- Modifying the hospital branding and colors in the Tailwind configuration
 
-- Vite
+## Usage
+
+1. Fill in patient details and select a doctor
+2. Choose an available date and time slot
+3. Complete the booking with additional information
+4. Review and print the appointment token
+
+## Technology Stack
+
+- React 
 - TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+- TailwindCSS
+- Vite
+- Google Apps Script
+- Google Sheets API
 
-## How can I deploy this project?
+## Project Structure
 
-Simply open [Lovable](https://lovable.dev/projects/180d9084-8b7a-44b0-8ca8-e01c889a76b9) and click on Share -> Publish.
+- `src/pages/` - Main application pages
+- `src/components/` - Reusable UI components
+- `src/context/` - React context for state management
+- `src/types/` - TypeScript type definitions
 
-## Can I connect a custom domain to my Lovable project?
+## License
 
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+This project is licensed under the MIT License.
