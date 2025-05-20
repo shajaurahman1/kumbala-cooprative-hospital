@@ -98,7 +98,7 @@ const getAppointmentsFromGoogleSheets = async (): Promise<Appointment[]> => {
         department: "",
         appointmentDate: row[4] || "",
         appointmentTime: row[5] || "",
-        tokenNumber: parseInt(row[6]) || (index + 1),
+        tokenNumber: row[6] || `${row[3]?.charAt(0) || 'X'}${index + 1}`, // Use token from sheet or generate one
         createdAt: new Date().toISOString()
       };
     }) : [];
@@ -131,14 +131,18 @@ const saveAppointmentToGoogleSheets = async (appointment: Appointment): Promise<
       );
     });
     
-    // Calculate token number based on matching appointments
-    const tokenNumber = matchingAppointments.length + 1;
+    // Get doctor's first initial
+    const doctorInitial = appointment.doctorName.charAt(0).toUpperCase();
+    
+    // Calculate token number based on matching appointments - sequential for each doctor
+    const sequentialNumber = matchingAppointments.length + 1;
+    const tokenCode = `${doctorInitial}${sequentialNumber}`;
     
     // Create appointment with token number
     const newAppointment = {
       ...appointment,
       id: `appointment-${Date.now()}`,
-      tokenNumber: tokenNumber,
+      tokenNumber: tokenCode,
       createdAt: new Date().toISOString()
     };
     
@@ -150,7 +154,7 @@ const saveAppointmentToGoogleSheets = async (appointment: Appointment): Promise<
     formData.append('doctor', newAppointment.doctorName);
     formData.append('date', new Date(newAppointment.appointmentDate).toISOString().split('T')[0]);
     formData.append('time', newAppointment.appointmentTime);
-    formData.append('token', tokenNumber.toString());
+    formData.append('token', tokenCode);
     
     // Post data to Google Sheets
     const response = await fetch(GOOGLE_SHEETS_API_URL, {
@@ -188,10 +192,15 @@ const saveAppointmentToGoogleSheets = async (appointment: Appointment): Promise<
       );
     });
     
+    // Get doctor's first initial for token
+    const doctorInitial = appointment.doctorName.charAt(0).toUpperCase();
+    const sequentialNumber = matchingAppointments.length + 1;
+    const tokenCode = `${doctorInitial}${sequentialNumber}`;
+    
     const newAppointment = {
       ...appointment,
       id: `appointment-${Date.now()}`,
-      tokenNumber: matchingAppointments.length + 1,
+      tokenNumber: tokenCode,
       createdAt: new Date().toISOString()
     };
     
@@ -263,7 +272,7 @@ const calculateTokenNumber = (
   date: Date, 
   time: string,
   allAppointments: Appointment[]
-): number => {
+): string => {
   // Get the number of appointments already scheduled for this doctor on this date
   const doctorAppointmentsOnDate = allAppointments.filter(appointment => {
     const appointmentDate = new Date(appointment.appointmentDate);
@@ -275,31 +284,14 @@ const calculateTokenNumber = (
     );
   });
   
-  // Sort them by time
-  const sortedAppointments = doctorAppointmentsOnDate.sort((a, b) => {
-    const timeA = a.appointmentTime.split(':').map(Number);
-    const timeB = b.appointmentTime.split(':').map(Number);
-    if (timeA[0] !== timeB[0]) return timeA[0] - timeB[0];
-    return timeA[1] - timeB[1];
-  });
+  // Get doctor's first initial
+  const doctorInitial = doctor.name.charAt(0).toUpperCase();
   
-  // Find the token number (position in sequence)
-  const selectedTimeComponents = time.split(':').map(Number);
-  let tokenNumber = 1;
+  // Calculate sequential number for this doctor on this date
+  const sequentialNumber = doctorAppointmentsOnDate.length + 1;
   
-  for (const appointment of sortedAppointments) {
-    const appointmentTimeComponents = appointment.appointmentTime.split(':').map(Number);
-    
-    if (
-      appointmentTimeComponents[0] < selectedTimeComponents[0] || 
-      (appointmentTimeComponents[0] === selectedTimeComponents[0] && 
-       appointmentTimeComponents[1] <= selectedTimeComponents[1])
-    ) {
-      tokenNumber++;
-    }
-  }
-  
-  return tokenNumber;
+  // Return token in format "X#" (e.g., "A1", "B2", etc.)
+  return `${doctorInitial}${sequentialNumber}`;
 };
 
 interface AppointmentContextType {

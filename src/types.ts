@@ -1,4 +1,3 @@
-
 export interface Doctor {
   id: string;
   name: string;
@@ -28,7 +27,7 @@ export interface Appointment {
   department: string;
   appointmentDate: string; // ISO string
   appointmentTime: string; // e.g., "10:00"
-  tokenNumber: number;
+  tokenNumber: string | number; // Updated to support both string and number formats
   createdAt: string; // ISO string
 }
 

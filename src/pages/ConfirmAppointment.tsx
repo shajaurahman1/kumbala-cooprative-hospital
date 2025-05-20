@@ -11,7 +11,7 @@ interface AppointmentData {
   doctorName: string;
   appointmentDate: string;
   appointmentTime: string;
-  tokenNumber: number;
+  tokenNumber: string | number;
   createdAt: string;
 }
 
@@ -118,7 +118,7 @@ const ConfirmAppointment = () => {
         <body>
           <div class="card">
             <div class="hospital-name">Kumbala Cooperative Hospital, Kasaragod</div>
-            <div class="token-number">Token #${appointment?.tokenNumber}</div>
+            <div class="token-number">Token ${appointment?.tokenNumber}</div>
             <div class="grid">
               <div>
                 <div class="label">Patient Name</div>
@@ -213,7 +213,7 @@ const ConfirmAppointment = () => {
           
           <div className="text-center mb-8">
             <p className="text-sm text-gray-500 uppercase font-semibold">YOUR TOKEN NUMBER</p>
-            <p className="text-7xl font-bold text-hospital-600 my-4">#{appointment.tokenNumber}</p>
+            <p className="text-7xl font-bold text-hospital-600 my-4">{appointment.tokenNumber}</p>
             <div className="bg-hospital-50 text-hospital-700 inline-block px-4 py-2 rounded-full text-sm font-medium">
               {formattedDate} at {appointment.appointmentTime}
             </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -7,6 +7,12 @@ import { useNavigate } from 'react-router-dom';
 
 // IMPORTANT: Update this with the URL from your Apps Script deployment
 const GOOGLE_SHEETS_API_URL = "https://script.google.com/macros/s/AKfycbw2lDK8fZy8EN7kYyGrMClQlrz3pMieZzEd31VpnOlMMGHT1kfp5ulTkSr36iUHpwL3/exec";
+
+// Define doctor available time slots (morning and afternoon)
+const DOCTOR_TIME_SLOTS = {
+  morning: ['09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00'],
+  afternoon: ['14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00']
+};
 
 const BookAppointment = () => {
   const navigate = useNavigate();
@@ -18,6 +24,8 @@ const BookAppointment = () => {
   const [appointmentTime, setAppointmentTime] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [availableTimes, setAvailableTimes] = useState<string[]>([]);
+  const [bookedAppointments, setBookedAppointments] = useState<{[key: string]: string[]}>({});
 
   // Available doctors
   const doctors = [
@@ -28,6 +36,72 @@ const BookAppointment = () => {
     { id: 'dr-chen', name: 'Dr. Li Chen', department: 'Gynecology' },
     { id: 'dr-brown', name: 'Dr. Robert Brown', department: 'General Medicine' }
   ];
+
+  // Fetch booked appointments when component loads
+  useEffect(() => {
+    const fetchBookedAppointments = async () => {
+      try {
+        const response = await fetch(GOOGLE_SHEETS_API_URL);
+        if (response.ok) {
+          const data = await response.json();
+          if (Array.isArray(data) && data.length > 1) {
+            // Skip the header row and process the appointments
+            const appointments = data.slice(1).reduce((acc: {[key: string]: string[]}, row: any) => {
+              const doctor = row[3] || '';
+              const date = row[4] || '';
+              const time = row[5] || '';
+              
+              if (doctor && date && time) {
+                const key = `${doctor}-${date}`;
+                if (!acc[key]) {
+                  acc[key] = [];
+                }
+                acc[key].push(time);
+              }
+              
+              return acc;
+            }, {});
+            
+            setBookedAppointments(appointments);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching booked appointments:', error);
+      }
+    };
+    
+    fetchBookedAppointments();
+  }, []);
+
+  // Update available times when doctor or date changes
+  useEffect(() => {
+    if (doctorName && appointmentDate) {
+      // Create key to look up booked appointments
+      const key = `${doctorName}-${appointmentDate}`;
+      const bookedTimes = bookedAppointments[key] || [];
+      
+      // Combine all possible time slots
+      const allSlots = [...DOCTOR_TIME_SLOTS.morning, ...DOCTOR_TIME_SLOTS.afternoon];
+      
+      // Filter out already booked times
+      const available = allSlots.filter(time => !bookedTimes.includes(time));
+      
+      // If all slots are booked, inform the user
+      if (available.length === 0) {
+        setErrorMessage('All appointments for this doctor on this date are booked. Please select another date.');
+        setAvailableTimes([]);
+      } else {
+        setErrorMessage('');
+        setAvailableTimes(available);
+        
+        // Auto-select the first available time slot
+        setAppointmentTime(available[0]);
+      }
+    } else {
+      setAvailableTimes([]);
+      setAppointmentTime('');
+    }
+  }, [doctorName, appointmentDate, bookedAppointments]);
 
   // Direct submission to Google Sheets
   const submitDirectToGoogleSheets = async (data: {
@@ -117,8 +191,16 @@ const BookAppointment = () => {
     setIsSubmitting(true);
     
     try {
-      // Generate token number
-      const tokenNumber = Math.floor(Math.random() * 100) + 1;
+      // Generate doctor initial for token
+      const doctorInitial = doctorName.charAt(0).toUpperCase();
+      
+      // Get count of existing appointments for this doctor on this date
+      const key = `${doctorName}-${appointmentDate}`;
+      const existingAppointments = bookedAppointments[key] || [];
+      const sequentialNumber = existingAppointments.length + 1;
+      
+      // Create token in format "X#" (e.g., "A1", "B2")
+      const tokenCode = `${doctorInitial}${sequentialNumber}`;
       
       // Prepare data for submission
       const appointmentData = {
@@ -128,7 +210,7 @@ const BookAppointment = () => {
         doctor: doctorName,
         date: appointmentDate,
         time: appointmentTime,
-        token: tokenNumber.toString()
+        token: tokenCode
       };
       
       // Store in localStorage for the confirmation page
@@ -139,7 +221,7 @@ const BookAppointment = () => {
         doctorName,
         appointmentDate,
         appointmentTime,
-        tokenNumber,
+        tokenNumber: tokenCode,
         createdAt: new Date().toISOString()
       }));
       
@@ -261,31 +343,37 @@ const BookAppointment = () => {
             
             <div>
               <Label htmlFor="appointmentTime">Appointment Time</Label>
-              <select
-                id="appointmentTime"
-                value={appointmentTime}
-                onChange={(e) => setAppointmentTime(e.target.value)}
-                className="w-full mt-1 p-2 border border-gray-300 rounded-md"
-              >
-                <option value="">-- Select time --</option>
-                <option value="09:00">09:00 AM</option>
-                <option value="09:30">09:30 AM</option>
-                <option value="10:00">10:00 AM</option>
-                <option value="10:30">10:30 AM</option>
-                <option value="11:00">11:00 AM</option>
-                <option value="11:30">11:30 AM</option>
-                <option value="12:00">12:00 PM</option>
-                <option value="14:00">02:00 PM</option>
-                <option value="14:30">02:30 PM</option>
-                <option value="15:00">03:00 PM</option>
-                <option value="15:30">03:30 PM</option>
-                <option value="16:00">04:00 PM</option>
-                <option value="16:30">04:30 PM</option>
-                <option value="17:00">05:00 PM</option>
-              </select>
+              {availableTimes.length > 0 ? (
+                <div className="mt-1">
+                  <p className="text-sm text-gray-600 mb-2">
+                    Available time slot selected for you:
+                  </p>
+                  <div className="p-3 border border-green-200 bg-green-50 rounded-md text-center">
+                    <span className="font-medium">{appointmentTime}</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Time slots are automatically assigned to prevent multiple patients
+                    being scheduled at the same time.
+                  </p>
+                </div>
+              ) : (
+                doctorName && appointmentDate ? (
+                  <div className="mt-1 p-3 border border-amber-200 bg-amber-50 rounded-md">
+                    <p className="text-sm text-amber-700">
+                      No available time slots for this doctor on this date. Please select another date.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mt-1 p-3 border border-gray-200 bg-gray-50 rounded-md">
+                    <p className="text-sm text-gray-700">
+                      Please select a doctor and date to see available time slots.
+                    </p>
+                  </div>
+                )
+              )}
             </div>
             
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
+            <Button type="submit" className="w-full" disabled={isSubmitting || availableTimes.length === 0}>
               {isSubmitting ? "Processing..." : "Submit Appointment Request"}
             </Button>
           </div>
