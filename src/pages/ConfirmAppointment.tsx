@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Printer, Home, Download } from 'lucide-react';
+import { Printer, Home, Download, Calendar } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -23,6 +23,7 @@ const ConfirmAppointment = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [appointment, setAppointment] = useState<AppointmentData | null>(null);
   const [isPdfGenerating, setIsPdfGenerating] = useState(false);
+  const [showCalendarInstructions, setShowCalendarInstructions] = useState(false);
   
   // Load appointment data from localStorage
   useEffect(() => {
@@ -51,6 +52,53 @@ const ConfirmAppointment = () => {
       printRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [appointment, navigate, isLoading]);
+
+  // Generate Google Calendar event URL
+  const getGoogleCalendarUrl = () => {
+    if (!appointment) return '#';
+    
+    // Parse date and time to create start and end times
+    const [year, month, day] = appointment.appointmentDate.split('-').map(num => parseInt(num));
+    const [hour, minute] = appointment.appointmentTime.split(':').map(num => parseInt(num));
+    
+    // Create Date objects for start and end (appointments last 30 minutes)
+    const startDate = new Date(year, month - 1, day, hour, minute);
+    const endDate = new Date(year, month - 1, day, hour, minute + 30);
+    
+    // Format dates for Google Calendar URL
+    const formatDate = (date: Date) => {
+      return date.toISOString().replace(/-|:|\.\d+/g, '');
+    };
+    
+    // Create event details
+    const details = {
+      text: `Appointment with ${appointment.doctorName}`,
+      dates: `${formatDate(startDate)}/${formatDate(endDate)}`,
+      details: `Patient: ${appointment.patientName}
+Age/Gender: ${appointment.patientAge}/${appointment.patientGender}
+Token Number: ${appointment.tokenNumber}
+Please arrive 15 minutes before your appointment.`,
+      location: "Kumbala Cooperative Hospital, Kasaragod",
+      reminders: "DISPLAY=15",
+    };
+    
+    // Build Google Calendar URL
+    const url = new URL('https://www.google.com/calendar/render?action=TEMPLATE');
+    url.searchParams.append('text', details.text);
+    url.searchParams.append('dates', details.dates);
+    url.searchParams.append('details', details.details);
+    url.searchParams.append('location', details.location);
+    url.searchParams.append('sf', 'true');
+    url.searchParams.append('output', 'xml');
+    
+    return url.toString();
+  };
+
+  // Handle showing calendar instructions
+  const handleCalendarClick = () => {
+    setShowCalendarInstructions(true);
+    window.open(getGoogleCalendarUrl(), '_blank');
+  };
 
   // Handle downloading the token as PDF
   const handleDownloadPDF = async () => {
@@ -353,6 +401,30 @@ const ConfirmAppointment = () => {
         </Card>
       </div>
       
+      {/* Google Calendar Instructions */}
+      {showCalendarInstructions && (
+        <Card className="p-4 mb-6 border-l-4 border-l-blue-500 max-w-xl w-full bg-blue-50">
+          <h3 className="text-lg font-semibold text-blue-800 mb-2">Get Appointment Reminders</h3>
+          <p className="text-sm text-blue-700 mb-3">
+            We've opened Google Calendar for you. Follow these steps to get reminders:
+          </p>
+          <ol className="text-sm text-blue-700 list-decimal pl-5 space-y-1">
+            <li>Click "Add to Calendar" on the Google Calendar page</li>
+            <li>Go to the event details and click "Edit"</li>
+            <li>Add a notification by clicking "Add notification"</li>
+            <li>Select when you want to be reminded (15 minutes, 1 hour, 1 day)</li>
+            <li>Save the event</li>
+          </ol>
+          <p className="text-sm text-blue-700 mt-3">
+            You'll receive notifications based on your Google Calendar settings.
+          </p>
+          <Button onClick={() => setShowCalendarInstructions(false)} variant="ghost" size="sm" className="mt-2 text-blue-700">
+            Close Instructions
+          </Button>
+        </Card>
+      )}
+      
+      {/* Action Buttons */}
       <div className="flex flex-col sm:flex-row gap-4 justify-center print:hidden">
         <Button 
           onClick={handlePrint}
@@ -371,6 +443,15 @@ const ConfirmAppointment = () => {
         >
           <Download className="h-5 w-5" />
           {isPdfGenerating ? "Generating PDF..." : "Download as PDF"}
+        </Button>
+        
+        <Button 
+          onClick={handleCalendarClick}
+          className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
+          size="lg"
+        >
+          <Calendar className="h-5 w-5" />
+          Add to Google Calendar
         </Button>
       </div>
       
