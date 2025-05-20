@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Printer, Home, Download, Calendar } from 'lucide-react';
+import { Printer, Home, Download, Calendar, Bell, BellOff } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -24,6 +24,16 @@ const ConfirmAppointment = () => {
   const [appointment, setAppointment] = useState<AppointmentData | null>(null);
   const [isPdfGenerating, setIsPdfGenerating] = useState(false);
   const [showCalendarInstructions, setShowCalendarInstructions] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState<string>('default');
+  const [alarmSet, setAlarmSet] = useState(false);
+  const [alarmTimeLeft, setAlarmTimeLeft] = useState<string | null>(null);
+  
+  // Check notification permission
+  useEffect(() => {
+    if ('Notification' in window) {
+      setNotificationPermission(Notification.permission);
+    }
+  }, []);
   
   // Load appointment data from localStorage
   useEffect(() => {
@@ -38,6 +48,167 @@ const ConfirmAppointment = () => {
       setIsLoading(false);
     }
   }, []);
+  
+  // Setup automatic alarm when appointment data is loaded
+  useEffect(() => {
+    if (!appointment) return;
+    
+    // When we have appointment data and notification permission
+    if (notificationPermission === 'granted') {
+      setupAutomaticAlarm();
+    }
+  }, [appointment, notificationPermission]);
+  
+  // Check remaining time until appointment and update UI
+  useEffect(() => {
+    if (!appointment || !alarmSet) return;
+    
+    const interval = setInterval(() => {
+      const timeUntilAppointment = getTimeUntilAppointment();
+      if (timeUntilAppointment) {
+        setAlarmTimeLeft(timeUntilAppointment);
+      } else {
+        clearInterval(interval);
+      }
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, [appointment, alarmSet]);
+  
+  // Calculate time until appointment
+  const getTimeUntilAppointment = () => {
+    if (!appointment) return null;
+    
+    const [year, month, day] = appointment.appointmentDate.split('-').map(num => parseInt(num));
+    const [hour, minute] = appointment.appointmentTime.split(':').map(num => parseInt(num));
+    
+    const appointmentTime = new Date(year, month - 1, day, hour, minute);
+    const now = new Date();
+    
+    // Get milliseconds until appointment
+    const diff = appointmentTime.getTime() - now.getTime();
+    
+    if (diff <= 0) return 'Appointment time has arrived';
+    
+    // Convert to hours, minutes, seconds
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+    
+    if (hours > 24) {
+      const days = Math.floor(hours / 24);
+      return `${days} day${days !== 1 ? 's' : ''} until appointment`;
+    }
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m until appointment`;
+    }
+    
+    return `${minutes}m ${seconds}s until appointment`;
+  };
+  
+  // Set up automatic alarm
+  const setupAutomaticAlarm = () => {
+    if (!appointment) return;
+    
+    try {
+      // Parse appointment date and time
+      const [year, month, day] = appointment.appointmentDate.split('-').map(num => parseInt(num));
+      const [hour, minute] = appointment.appointmentTime.split(':').map(num => parseInt(num));
+      
+      // Create appointment time Date object
+      const appointmentTime = new Date(year, month - 1, day, hour, minute);
+      
+      // Calculate reminder time (15 minutes before)
+      const reminderTime = new Date(appointmentTime.getTime() - 15 * 60 * 1000);
+      const now = new Date();
+      
+      // Store this in localStorage for persistent alarms across page reloads
+      const alarmData = {
+        appointmentTime: appointmentTime.toISOString(),
+        reminderTime: reminderTime.toISOString(),
+        doctor: appointment.doctorName,
+        token: appointment.tokenNumber,
+        fired: false
+      };
+      
+      localStorage.setItem('appointmentAlarm', JSON.stringify(alarmData));
+      
+      // If reminder time is in the future, schedule it
+      if (reminderTime > now) {
+        const timeoutMs = reminderTime.getTime() - now.getTime();
+        
+        // Set timeout for the notification
+        const alarmId = setTimeout(() => {
+          // When the time comes, show notification
+          new Notification('Appointment Reminder', {
+            body: `Your appointment with ${appointment.doctorName} is in 15 minutes. Your token is ${appointment.tokenNumber}.`,
+            icon: '/favicon.ico'
+          });
+          
+          // Mark as fired in localStorage
+          const updatedAlarmData = { ...alarmData, fired: true };
+          localStorage.setItem('appointmentAlarm', JSON.stringify(updatedAlarmData));
+          
+          // Update state
+          setAlarmSet(false);
+          setAlarmTimeLeft('Notification sent');
+        }, timeoutMs);
+        
+        // Store timeout ID to allow cancellation
+        window.alarmTimeoutId = alarmId;
+        setAlarmSet(true);
+      } else if (appointmentTime > now) {
+        // If we're within 15 minutes of the appointment but before it starts
+        new Notification('Appointment Coming Up', {
+          body: `Your appointment with ${appointment.doctorName} is coming up soon. Your token is ${appointment.tokenNumber}.`,
+          icon: '/favicon.ico'
+        });
+        setAlarmTimeLeft('Notification sent - appointment is soon');
+      } else {
+        setAlarmTimeLeft('Appointment time has passed');
+      }
+    } catch (error) {
+      console.error('Error setting up alarm:', error);
+    }
+  };
+  
+  // Request notification permission
+  const requestNotificationPermission = async () => {
+    if (!('Notification' in window)) {
+      alert('This browser does not support desktop notifications');
+      return;
+    }
+    
+    try {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+      
+      if (permission === 'granted') {
+        setupAutomaticAlarm();
+        
+        // Notify user that alarm has been set
+        new Notification('Alarm Set', {
+          body: 'You will receive a notification 15 minutes before your appointment.',
+          icon: '/favicon.ico'
+        });
+      }
+    } catch (error) {
+      console.error('Error requesting notification permission:', error);
+    }
+  };
+  
+  // Cancel the alarm
+  const cancelAlarm = () => {
+    if (window.alarmTimeoutId) {
+      clearTimeout(window.alarmTimeoutId);
+      window.alarmTimeoutId = null;
+    }
+    
+    localStorage.removeItem('appointmentAlarm');
+    setAlarmSet(false);
+    setAlarmTimeLeft(null);
+  };
   
   useEffect(() => {
     // If there's no appointment, redirect to booking page
@@ -401,6 +572,68 @@ Please arrive 15 minutes before your appointment.`,
         </Card>
       </div>
       
+      {/* Automatic Alarm Card */}
+      <Card className="p-4 mb-6 border-l-4 border-l-purple-500 max-w-xl w-full bg-purple-50">
+        <div className="flex justify-between items-start">
+          <div>
+            <h3 className="text-lg font-semibold text-purple-800 mb-2 flex items-center">
+              <Bell className="h-5 w-5 mr-2 text-purple-700" />
+              Appointment Reminder
+            </h3>
+            {notificationPermission === 'granted' ? (
+              alarmSet ? (
+                <div>
+                  <p className="text-sm text-purple-700 mb-1">
+                    <span className="font-semibold">Automatic reminder set!</span> You'll receive a notification 15 minutes before your appointment.
+                  </p>
+                  {alarmTimeLeft && (
+                    <p className="text-xs text-purple-600">
+                      Status: {alarmTimeLeft}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-purple-700">
+                  You'll receive a notification 15 minutes before your appointment.
+                </p>
+              )
+            ) : (
+              <p className="text-sm text-purple-700">
+                Enable notifications to get an automatic reminder 15 minutes before your appointment.
+              </p>
+            )}
+          </div>
+          
+          {notificationPermission !== 'granted' ? (
+            <Button 
+              onClick={requestNotificationPermission} 
+              variant="outline"
+              className="text-purple-700 border-purple-300 hover:bg-purple-100"
+            >
+              Enable Reminders
+            </Button>
+          ) : alarmSet ? (
+            <Button 
+              onClick={cancelAlarm}
+              variant="outline"
+              className="text-red-600 border-red-300 hover:bg-red-50 flex items-center"
+              size="sm"
+            >
+              <BellOff className="h-4 w-4 mr-1" />
+              Cancel Reminder
+            </Button>
+          ) : (
+            <Button 
+              onClick={setupAutomaticAlarm}
+              variant="outline"
+              className="text-purple-700 border-purple-300 hover:bg-purple-100"
+            >
+              Set Reminder
+            </Button>
+          )}
+        </div>
+      </Card>
+      
       {/* Google Calendar Instructions */}
       {showCalendarInstructions && (
         <Card className="p-4 mb-6 border-l-4 border-l-blue-500 max-w-xl w-full bg-blue-50">
@@ -466,5 +699,12 @@ Please arrive 15 minutes before your appointment.`,
     </div>
   );
 };
+
+// Add global type for the alarm timeout ID
+declare global {
+  interface Window {
+    alarmTimeoutId: any;
+  }
+}
 
 export default ConfirmAppointment; 
