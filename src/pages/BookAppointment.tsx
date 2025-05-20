@@ -4,6 +4,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
+import { Checkbox } from '@/components/ui/checkbox';
 
 // IMPORTANT: Update this with the URL from your Apps Script deployment
 const GOOGLE_SHEETS_API_URL = "https://script.google.com/macros/s/AKfycbw2lDK8fZy8EN7kYyGrMClQlrz3pMieZzEd31VpnOlMMGHT1kfp5ulTkSr36iUHpwL3/exec";
@@ -14,11 +15,23 @@ const DOCTOR_TIME_SLOTS = {
   afternoon: ['14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00']
 };
 
+// Map for doctor token prefixes
+const DOCTOR_TOKEN_PREFIXES = {
+  'Dr. Sarah Smith': 'S',
+  'Dr. Michael Johnson': 'M',
+  'Dr. Neha Patel': 'N',
+  'Dr. James Wilson': 'J',
+  'Dr. Li Chen': 'L',
+  'Dr. Robert Brown': 'R'
+};
+
 const BookAppointment = () => {
   const navigate = useNavigate();
   const [patientName, setPatientName] = useState('');
   const [patientAge, setPatientAge] = useState('');
   const [patientGender, setPatientGender] = useState('male');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [setReminder, setSetReminder] = useState(false);
   const [doctorName, setDoctorName] = useState('');
   const [appointmentDate, setAppointmentDate] = useState('');
   const [appointmentTime, setAppointmentTime] = useState('');
@@ -26,6 +39,7 @@ const BookAppointment = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [availableTimes, setAvailableTimes] = useState<string[]>([]);
   const [bookedAppointments, setBookedAppointments] = useState<{[key: string]: string[]}>({});
+  const [doctorTokens, setDoctorTokens] = useState<{[key: string]: number}>({});
 
   // Available doctors
   const doctors = [
@@ -62,7 +76,28 @@ const BookAppointment = () => {
               return acc;
             }, {});
             
+            // Also track the tokens per doctor per date
+            const tokens = data.slice(1).reduce((acc: {[key: string]: number}, row: any) => {
+              const doctor = row[3] || '';
+              const date = row[4] || '';
+              const token = row[6] || '';
+              
+              if (doctor && date && token) {
+                // Extract the token number from the format "X#" (e.g., "S1", "L2")
+                const tokenNumber = parseInt(token.substring(1));
+                const doctorDateKey = `${doctor}-${date}`;
+                
+                // Keep track of highest token number for each doctor on each date
+                if (!acc[doctorDateKey] || tokenNumber > acc[doctorDateKey]) {
+                  acc[doctorDateKey] = tokenNumber;
+                }
+              }
+              
+              return acc;
+            }, {});
+            
             setBookedAppointments(appointments);
+            setDoctorTokens(tokens);
           }
         }
       } catch (error) {
@@ -90,6 +125,7 @@ const BookAppointment = () => {
       if (available.length === 0) {
         setErrorMessage('All appointments for this doctor on this date are booked. Please select another date.');
         setAvailableTimes([]);
+        setAppointmentTime('');
       } else {
         setErrorMessage('');
         setAvailableTimes(available);
@@ -103,6 +139,56 @@ const BookAppointment = () => {
     }
   }, [doctorName, appointmentDate, bookedAppointments]);
 
+  // Set browser reminder notification
+  const setAppointmentReminder = (date: string, time: string, doctor: string, token: string) => {
+    if (!setReminder) return;
+    
+    try {
+      // Parse appointment time
+      const [hours, minutes] = time.split(':').map(Number);
+      const appointmentDateTime = new Date(date);
+      appointmentDateTime.setHours(hours, minutes, 0);
+      
+      // Set reminder time to 15 minutes before appointment
+      const reminderTime = new Date(appointmentDateTime.getTime() - 15 * 60 * 1000);
+      
+      // Create calendar event data for the appointment
+      const eventData = {
+        title: `Appointment with ${doctor}`,
+        description: `Token: ${token}\nPhone: ${phoneNumber}`,
+        startTime: appointmentDateTime.toISOString(),
+        reminderMinutes: 15
+      };
+      
+      // Store the reminder data in localStorage
+      localStorage.setItem('appointmentReminder', JSON.stringify(eventData));
+      
+      // If the appointment is today, set up a browser notification
+      const today = new Date();
+      if (appointmentDateTime.toDateString() === today.toDateString()) {
+        const notifyInMs = reminderTime.getTime() - today.getTime();
+        if (notifyInMs > 0) {
+          setTimeout(() => {
+            // Request notification permission if needed
+            if (Notification.permission !== "granted") {
+              Notification.requestPermission();
+            }
+            
+            // Create notification if permission granted
+            if (Notification.permission === "granted") {
+              new Notification("Appointment Reminder", {
+                body: `Your appointment with ${doctor} is in 15 minutes. Token: ${token}`,
+                icon: "/favicon.ico"
+              });
+            }
+          }, notifyInMs);
+        }
+      }
+    } catch (error) {
+      console.error("Error setting notification reminder:", error);
+    }
+  };
+
   // Direct submission to Google Sheets
   const submitDirectToGoogleSheets = async (data: {
     name: string;
@@ -112,6 +198,8 @@ const BookAppointment = () => {
     date: string;
     time: string;
     token: string;
+    phone?: string;
+    reminder?: string;
   }) => {
     return new Promise<boolean>((resolve, reject) => {
       // Create a direct form post element
@@ -186,24 +274,66 @@ const BookAppointment = () => {
       return;
     }
     
+    // Validate phone number if reminder notification is requested
+    if (setReminder) {
+      if (!phoneNumber || phoneNumber.trim().length < 10) {
+        setErrorMessage('Please enter a valid phone number for contact purposes');
+        return;
+      }
+    }
+    
+    // Double-check if time slot is still available (prevents race conditions)
+    const key = `${doctorName}-${appointmentDate}`;
+    const bookedTimes = bookedAppointments[key] || [];
+    if (bookedTimes.includes(appointmentTime)) {
+      setErrorMessage('This time slot has just been booked by someone else. Please select another time.');
+      // Refresh available times
+      const allSlots = [...DOCTOR_TIME_SLOTS.morning, ...DOCTOR_TIME_SLOTS.afternoon];
+      const available = allSlots.filter(time => !bookedTimes.includes(time));
+      setAvailableTimes(available);
+      if (available.length > 0) {
+        setAppointmentTime(available[0]);
+      }
+      return;
+    }
+    
     // Clear error and set submitting state
     setErrorMessage('');
     setIsSubmitting(true);
     
     try {
-      // Generate doctor initial for token
-      const doctorInitial = doctorName.charAt(0).toUpperCase();
+      // Get doctor's token prefix (or use first letter if not defined)
+      const doctorPrefix = DOCTOR_TOKEN_PREFIXES[doctorName] || doctorName.charAt(0).toUpperCase();
       
-      // Get count of existing appointments for this doctor on this date
-      const key = `${doctorName}-${appointmentDate}`;
-      const existingAppointments = bookedAppointments[key] || [];
-      const sequentialNumber = existingAppointments.length + 1;
+      // Get last token number for this doctor on this date
+      const doctorDateKey = `${doctorName}-${appointmentDate}`;
+      const lastTokenNumber = doctorTokens[doctorDateKey] || 0;
       
-      // Create token in format "X#" (e.g., "A1", "B2")
-      const tokenCode = `${doctorInitial}${sequentialNumber}`;
+      // Increment token number
+      const nextTokenNumber = lastTokenNumber + 1;
+      
+      // Create token in format "X#" (e.g., "S1", "L2")
+      const tokenCode = `${doctorPrefix}${nextTokenNumber}`;
+      
+      // Update local state to prevent duplicate tokens
+      setDoctorTokens(prev => ({
+        ...prev,
+        [doctorDateKey]: nextTokenNumber
+      }));
+      
+      // Update local state to prevent double booking
+      setBookedAppointments(prev => ({
+        ...prev,
+        [key]: [...(prev[key] || []), appointmentTime]
+      }));
+      
+      // If reminder is enabled, set up the notification
+      if (setReminder) {
+        setAppointmentReminder(appointmentDate, appointmentTime, doctorName, tokenCode);
+      }
       
       // Prepare data for submission
-      const appointmentData = {
+      const appointmentData: any = {
         name: patientName,
         age: patientAge,
         gender: patientGender,
@@ -212,6 +342,12 @@ const BookAppointment = () => {
         time: appointmentTime,
         token: tokenCode
       };
+      
+      // Add reminder info if enabled
+      if (setReminder && phoneNumber) {
+        appointmentData.phone = phoneNumber;
+        appointmentData.reminder = "yes";
+      }
       
       // Store in localStorage for the confirmation page
       localStorage.setItem('currentAppointment', JSON.stringify({
@@ -222,6 +358,8 @@ const BookAppointment = () => {
         appointmentDate,
         appointmentTime,
         tokenNumber: tokenCode,
+        phoneNumber: setReminder ? phoneNumber : '',
+        reminderSet: setReminder,
         createdAt: new Date().toISOString()
       }));
       
@@ -311,6 +449,35 @@ const BookAppointment = () => {
                 <option value="other">Other</option>
               </select>
             </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Checkbox 
+                  id="reminderOpt" 
+                  checked={setReminder} 
+                  onCheckedChange={(checked) => setSetReminder(checked === true)}
+                />
+                <Label htmlFor="reminderOpt" className="cursor-pointer">
+                  Set a 15-minute reminder before appointment (optional)
+                </Label>
+              </div>
+              
+              {setReminder && (
+                <div>
+                  <Label htmlFor="phoneNumber">Contact Phone Number</Label>
+                  <Input
+                    id="phoneNumber"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
+                    placeholder="Enter your phone number"
+                    className="mt-1"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Required for appointment reminders
+                  </p>
+                </div>
+              )}
+            </div>
             
             <div>
               <Label htmlFor="doctorName">Select Doctor</Label>
@@ -346,14 +513,22 @@ const BookAppointment = () => {
               {availableTimes.length > 0 ? (
                 <div className="mt-1">
                   <p className="text-sm text-gray-600 mb-2">
-                    Available time slot selected for you:
+                    Available time slots:
                   </p>
-                  <div className="p-3 border border-green-200 bg-green-50 rounded-md text-center">
-                    <span className="font-medium">{appointmentTime}</span>
-                  </div>
+                  <select
+                    id="timeSelect"
+                    value={appointmentTime}
+                    onChange={(e) => setAppointmentTime(e.target.value)}
+                    className="w-full p-2 border border-gray-300 rounded-md"
+                  >
+                    {availableTimes.map(time => (
+                      <option key={time} value={time}>
+                        {time}
+                      </option>
+                    ))}
+                  </select>
                   <p className="text-xs text-gray-500 mt-2">
-                    Time slots are automatically assigned to prevent multiple patients
-                    being scheduled at the same time.
+                    Please select your preferred time slot from available options.
                   </p>
                 </div>
               ) : (

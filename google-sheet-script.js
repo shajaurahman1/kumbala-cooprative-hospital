@@ -48,12 +48,14 @@ function handleResponse(e) {
     var date = e.parameter.date || "";
     var time = e.parameter.time || "";
     var token = e.parameter.token || "";
+    var phone = e.parameter.phone || "";
+    var reminder = e.parameter.reminder || "no";
     
     // Log what we're about to save
-    Logger.log("About to append row with: " + name + ", " + age + ", " + gender + ", " + doctor + ", " + date + ", " + time + ", " + token);
+    Logger.log("About to append row with: " + name + ", " + age + ", " + gender + ", " + doctor + ", " + date + ", " + time + ", " + token + ", " + phone + ", " + reminder);
     
     // Append data to the sheet (make sure column order matches your sheet)
-    sheet.appendRow([name, age, gender, doctor, date, time, token, new Date()]);
+    sheet.appendRow([name, age, gender, doctor, date, time, token, phone, reminder, new Date()]);
     
     // Return success message
     return ContentService
@@ -66,7 +68,8 @@ function handleResponse(e) {
           "doctor": doctor,
           "date": date,
           "time": time,
-          "token": token
+          "token": token,
+          "reminderSet": (reminder === "yes" && phone) ? "yes" : "no"
         }
       }))
       .setMimeType(ContentService.MimeType.JSON);
@@ -88,7 +91,7 @@ function initialize() {
   
   // If there are no headers, add them
   if (sheet.getLastRow() === 0) {
-    sheet.appendRow(["name", "age", "gender", "doctor", "date", "time", "token", "timestamp"]);
+    sheet.appendRow(["name", "age", "gender", "doctor", "date", "time", "token", "phone", "reminder", "timestamp"]);
   }
   
   Logger.log("Initialization complete");
