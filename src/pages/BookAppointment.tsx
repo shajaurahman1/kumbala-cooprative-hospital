@@ -11,8 +11,8 @@ const GOOGLE_SHEETS_API_URL = "https://script.google.com/macros/s/AKfycbw2lDK8fZ
 
 // Define doctor available time slots (morning and afternoon)
 const DOCTOR_TIME_SLOTS = {
-  morning: ['09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00'],
-  afternoon: ['14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00']
+  morning: ['09:00', '09:15', '09:30', '09:45', '10:00', '10:15', '10:30', '10:45', '11:00', '11:15', '11:30', '11:45', '12:00'],
+  afternoon: ['14:00', '14:15', '14:30', '14:45', '15:00', '15:15', '15:30', '15:45', '16:00', '16:15', '16:30', '16:45', '17:00']
 };
 
 // Map for doctor token prefixes
@@ -31,7 +31,7 @@ const BookAppointment = () => {
   const [patientAge, setPatientAge] = useState('');
   const [patientGender, setPatientGender] = useState('male');
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [setReminder, setSetReminder] = useState(false);
+  const [sendSMS, setSendSMS] = useState(false);
   const [doctorName, setDoctorName] = useState('');
   const [appointmentDate, setAppointmentDate] = useState('');
   const [appointmentTime, setAppointmentTime] = useState('');
@@ -139,56 +139,6 @@ const BookAppointment = () => {
     }
   }, [doctorName, appointmentDate, bookedAppointments]);
 
-  // Set browser reminder notification
-  const setAppointmentReminder = (date: string, time: string, doctor: string, token: string) => {
-    if (!setReminder) return;
-    
-    try {
-      // Parse appointment time
-      const [hours, minutes] = time.split(':').map(Number);
-      const appointmentDateTime = new Date(date);
-      appointmentDateTime.setHours(hours, minutes, 0);
-      
-      // Set reminder time to 15 minutes before appointment
-      const reminderTime = new Date(appointmentDateTime.getTime() - 15 * 60 * 1000);
-      
-      // Create calendar event data for the appointment
-      const eventData = {
-        title: `Appointment with ${doctor}`,
-        description: `Token: ${token}\nPhone: ${phoneNumber}`,
-        startTime: appointmentDateTime.toISOString(),
-        reminderMinutes: 15
-      };
-      
-      // Store the reminder data in localStorage
-      localStorage.setItem('appointmentReminder', JSON.stringify(eventData));
-      
-      // If the appointment is today, set up a browser notification
-      const today = new Date();
-      if (appointmentDateTime.toDateString() === today.toDateString()) {
-        const notifyInMs = reminderTime.getTime() - today.getTime();
-        if (notifyInMs > 0) {
-          setTimeout(() => {
-            // Request notification permission if needed
-            if (Notification.permission !== "granted") {
-              Notification.requestPermission();
-            }
-            
-            // Create notification if permission granted
-            if (Notification.permission === "granted") {
-              new Notification("Appointment Reminder", {
-                body: `Your appointment with ${doctor} is in 15 minutes. Token: ${token}`,
-                icon: "/favicon.ico"
-              });
-            }
-          }, notifyInMs);
-        }
-      }
-    } catch (error) {
-      console.error("Error setting notification reminder:", error);
-    }
-  };
-
   // Direct submission to Google Sheets
   const submitDirectToGoogleSheets = async (data: {
     name: string;
@@ -199,7 +149,7 @@ const BookAppointment = () => {
     time: string;
     token: string;
     phone?: string;
-    reminder?: string;
+    sms?: string;
   }) => {
     return new Promise<boolean>((resolve, reject) => {
       // Create a direct form post element
@@ -274,10 +224,10 @@ const BookAppointment = () => {
       return;
     }
     
-    // Validate phone number if reminder notification is requested
-    if (setReminder) {
+    // Validate phone number if SMS reminder is requested
+    if (sendSMS) {
       if (!phoneNumber || phoneNumber.trim().length < 10) {
-        setErrorMessage('Please enter a valid phone number for contact purposes');
+        setErrorMessage('Please enter a valid phone number for SMS reminders');
         return;
       }
     }
@@ -327,11 +277,6 @@ const BookAppointment = () => {
         [key]: [...(prev[key] || []), appointmentTime]
       }));
       
-      // If reminder is enabled, set up the notification
-      if (setReminder) {
-        setAppointmentReminder(appointmentDate, appointmentTime, doctorName, tokenCode);
-      }
-      
       // Prepare data for submission
       const appointmentData: any = {
         name: patientName,
@@ -343,10 +288,10 @@ const BookAppointment = () => {
         token: tokenCode
       };
       
-      // Add reminder info if enabled
-      if (setReminder && phoneNumber) {
+      // Add SMS info if enabled
+      if (sendSMS && phoneNumber) {
         appointmentData.phone = phoneNumber;
-        appointmentData.reminder = "yes";
+        appointmentData.sms = "yes";
       }
       
       // Store in localStorage for the confirmation page
@@ -358,8 +303,8 @@ const BookAppointment = () => {
         appointmentDate,
         appointmentTime,
         tokenNumber: tokenCode,
-        phoneNumber: setReminder ? phoneNumber : '',
-        reminderSet: setReminder,
+        phoneNumber: sendSMS ? phoneNumber : '',
+        smsSent: sendSMS,
         createdAt: new Date().toISOString()
       }));
       
@@ -453,27 +398,27 @@ const BookAppointment = () => {
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Checkbox 
-                  id="reminderOpt" 
-                  checked={setReminder} 
-                  onCheckedChange={(checked) => setSetReminder(checked === true)}
+                  id="smsOpt" 
+                  checked={sendSMS} 
+                  onCheckedChange={(checked) => setSendSMS(checked === true)}
                 />
-                <Label htmlFor="reminderOpt" className="cursor-pointer">
-                  Set a 15-minute reminder before appointment (optional)
+                <Label htmlFor="smsOpt" className="cursor-pointer">
+                  Receive SMS reminders with your token number (optional)
                 </Label>
               </div>
               
-              {setReminder && (
+              {sendSMS && (
                 <div>
-                  <Label htmlFor="phoneNumber">Contact Phone Number</Label>
+                  <Label htmlFor="phoneNumber">Mobile Number</Label>
                   <Input
                     id="phoneNumber"
                     value={phoneNumber}
                     onChange={(e) => setPhoneNumber(e.target.value)}
-                    placeholder="Enter your phone number"
+                    placeholder="Enter your mobile number"
                     className="mt-1"
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    Required for appointment reminders
+                    You'll receive an SMS reminder 15 minutes before your appointment
                   </p>
                 </div>
               )}
